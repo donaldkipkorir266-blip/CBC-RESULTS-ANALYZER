@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduTrack Pro - CBC Evaluation System</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- jsPDF & AutoTable -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
+    <!-- SheetJS (Excel/CSV) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        /* Custom Styles & Animations */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; overflow-x: hidden; }
+        .hide { display: none !important; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Toast Notifications */
+        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+        .toast { padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; box-shadow: 0 4px 6px rgba(0,0,0,0.1); animation: slideIn 0.3s ease-out forwards; }
+        .toast.success { background-color: #10b981; }
+        .toast.error { background-color: #ef4444; }
+        .toast.info { background-color: #3b82f6; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        
+        /* Loader */
+        .spinner { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid #3b82f6; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Modals */
+        .modal-overlay { background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); }
+        
+        /* Mobile Table Scroll */
+        .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex flex-col">
+
+    <!-- Network Status Indicator -->
+    <div id="network-status" class="hide bg-yellow-500 text-white text-center text-sm py-1 font-medium w-full z-50 fixed top-0">
+        <i data-lucide="wifi-off" class="inline w-4 h-4 mr-1"></i> You are offline. Changes will sync when reconnected.
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- App Loading Screen -->
+    <div id="app-loader" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center">
+        <div class="spinner w-12 h-12 mb-4 border-t-blue-600"></div>
+        <h2 class="text-xl font-bold text-gray-700">EduTrack Pro</h2>
+        <p class="text-gray-500 mt-2">Loading CBC Evaluation System...</p>
+    </div>
+
+    <!-- Login/Auth Screen -->
+    <div id="view-login" class="hide flex-1 flex items-center justify-center bg-gray-50 px-4 pt-10">
+        <div class="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+            <div class="text-center mb-8">
+                <div class="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="graduation-cap" class="text-white w-8 h-8"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900">EduTrack Pro</h2>
+                <p class="text-sm text-gray-500 mt-1">Sign in to your account</p>
+            </div>
+            <form id="login-form" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Email Address</label>
+                    <input type="email" id="login-email" required class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <button type="submit" id="login-btn" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                    Sign In / Register
+                </button>
+            </form>
+            <div id="first-user-notice" class="mt-4 p-4 bg-blue-50 text-blue-700 rounded-lg text-sm text-center hide">
+                No admin found in the system. The next account created will be granted Admin privileges.
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application Layout -->
+    <div id="view-main" class="hide flex-1 flex h-screen overflow-hidden pt-6 lg:pt-0">
+        
+        <!-- Sidebar -->
+        <aside id="sidebar" class="bg-gray-900 text-white w-64 flex-shrink-0 hidden lg:flex flex-col h-full absolute lg:relative z-40 transition-transform transform -translate-x-full lg:translate-x-0">
+            <div class="p-6 flex items-center gap-3 border-b border-gray-800">
+                <i data-lucide="graduation-cap" class="w-8 h-8 text-blue-400"></i>
+                <span class="text-xl font-bold tracking-tight">EduTrack</span>
+                <button id="close-sidebar" class="lg:hidden ml-auto text-gray-400 hover:text-white"><i data-lucide="x"></i></button>
+            </div>
+            
+            <div class="p-4 border-b border-gray-800">
+                <div class="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Logged in as</div>
+                <div id="user-name-display" class="font-semibold truncate">User Name</div>
+                <div id="user-role-display" class="text-xs text-blue-400 mt-1 bg-blue-900/30 inline-block px-2 py-1 rounded">Role</div>
+            </div>
+
+            <nav id="nav-menu" class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+                <!-- Navigation items dynamically injected here -->
+            </nav>
+            
+            <div class="p-4 border-t border-gray-800">
+                <button id="logout-btn" class="flex items-center gap-3 text-gray-400 hover:text-white w-full px-4 py-2 rounded-lg transition-colors hover:bg-gray-800">
+                    <i data-lucide="log-out" class="w-5 h-5"></i> Sign Out
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden bg-gray-50 relative">
+            
+            <!-- Mobile Header -->
+            <header class="bg-white shadow-sm lg:hidden flex items-center justify-between p-4 z-30 relative">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="graduation-cap" class="w-6 h-6 text-blue-600"></i>
+                    <span class="font-bold text-gray-900">EduTrack</span>
+                </div>
+                <button id="open-sidebar" class="text-gray-600 p-2"><i data-lucide="menu"></i></button>
+            </header>
+
+            <!-- Dynamic Content Container -->
+            <div id="content-area" class="flex-1 overflow-y-auto p-4 lg:p-8">
+                <!-- Content injected here via JS -->
+            </div>
+        </main>
+        
+        <!-- Mobile Sidebar Overlay -->
+        <div id="sidebar-overlay" class="hide fixed inset-0 bg-black/50 z-30 lg:hidden"></div>
+    </div>
+
+    <!-- Universal Modal Container -->
+    <div id="modal-container" class="hide fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="modal-overlay absolute inset-0" onclick="closeModal()"></div>
+        <div id="modal-content" class="bg-white rounded-xl shadow-2xl z-10 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 id="modal-title" class="text-lg font-semibold text-gray-900">Modal Title</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <!-- Modal Body -->
+            <div id="modal-body" class="p-6 overflow-y-auto flex-1">
+                <!-- Form/Content injected here -->
+            </div>
+            <!-- Modal Footer -->
+            <div id="modal-footer" class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+                <!-- Buttons injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, getDoc, initializeFirestore, persistentLocalCache, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Configuration & Initialization ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'edutrack-production-app';
+        let firebaseConfig = {
+            apiKey: "dummy-key",
+            projectId: "dummy-project",
+            appId: "dummy-appid"
+        };
+        
+        if (typeof __firebase_config !== 'undefined') {
+            try { firebaseConfig = JSON.parse(__firebase_config); } catch (e) { console.warn("Invalid firebase config"); }
+        }
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        
+        // Enable offline persistence
+        const db = initializeFirestore(app, { localCache: persistentLocalCache() });
+
+        // --- Global State ---
+        const state = {
+            user: null, // Firebase Auth User
+            profile: null, // User Document from DB
+            data: {
+                users: [],
+                classes: [],
+                subjects: [],
+                students: [],
+                marks: []
+            },
+            unsubscribes: [],
+            currentRoute: 'dashboard'
+        };
+
+        // --- Utilities ---
+        const $ = id => document.getElementById(id);
+        const show = id => $(id)?.classList.remove('hide');
+        const hide = id => $(id)?.classList.add('hide');
+        const generateId = () => crypto.randomUUID();
+        
+        window.toast = (message, type = 'info') => {
+            const container = $('toast-container');
+            const toastEl = document.createElement('div');
+            toastEl.className = `toast ${type}`;
+            toastEl.innerHTML = `<div class="flex items-center gap-2">
+                ${type === 'success' ? '<i data-lucide="check-circle" class="w-4 h-4"></i>' : 
+                  type === 'error' ? '<i data-lucide="alert-circle" class="w-4 h-4"></i>' : 
+                  '<i data-lucide="info" class="w-4 h-4"></i>'}
+                ${message}
+            </div>`;
+            container.appendChild(toastEl);
+            lucide.createIcons({ root: toastEl });
+            setTimeout(() => { toastEl.style.opacity = '0'; setTimeout(() => toastEl.remove(), 300); }, 4000);
+        };
+
+        // CBC Grading Logic
+        const getGrade = (score) => {
+            const num = parseFloat(score);
+            if (isNaN(num)) return { grade: '-', remark: 'No Data', points: 0, color: 'text-gray-500' };
+            if (num >= 80) return { grade: 'EE', remark: 'Exceeding Expectations', points: 4, color: 'text-green-600' };
+            if (num >= 65) return { grade: 'ME', remark: 'Meeting Expectations', points: 3, color: 'text-blue-600' };
+            if (num >= 50) return { grade: 'AE', remark: 'Approaching Expectations', points: 2, color: 'text-yellow-600' };
+            return { grade: 'BE', remark: 'Below Expectations', points: 1, color: 'text-red-600' };
+        };
+
+        // --- Database References (Adhering strictly to Rule 1 & 2) ---
+        const getColRef = (colName) => collection(db, 'artifacts', appId, 'public', 'data', colName);
+        const getDocRef = (colName, docId) => doc(db, 'artifacts', appId, 'public', 'data', colName, docId);
+
+        // --- Authentication & Initialization ---
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth error:", error);
+                toast("Authentication failed.", "error");
+            }
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            state.user = user;
+            if (user) {
+                // Pre-fetch users to check if Admin exists
+                const userSnap = await getDoc(getDocRef('users', 'system_stats')); // Dummy check
+                setupRealtimeListeners();
+            } else {
+                hide('view-main');
+                hide('app-loader');
+                show('view-login');
+            }
+        });
+
+        // --- Realtime Listeners ---
+        function setupRealtimeListeners() {
+            if (!state.user) return;
+            
+            // Clear existing
+            state.unsubscribes.forEach(unsub => unsub());
+            state.unsubscribes = [];
+
+            const collections = ['users', 'classes', 'subjects', 'students', 'marks'];
+            let loadedCount = 0;
+
+            collections.forEach(colName => {
+                const unsub = onSnapshot(getColRef(colName), (snap) => {
+                    state.data[colName] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    
+                    if (loadedCount < collections.length) {
+                        loadedCount++;
+                        if (loadedCount === collections.length) {
+                            checkUserProfile();
+                        }
+                    } else {
+                        // Incremental update - refresh UI safely
+                        if(state.profile) renderCurrentView();
+                    }
+                }, (err) => {
+                    console.error(`Error listening to ${colName}:`, err);
+                });
+                state.unsubscribes.push(unsub);
+            });
+        }
+
+        function checkUserProfile() {
+            hide('app-loader');
+            const hasAdmin = state.data.users.some(u => u.role === 'admin');
+            
+            if (!hasAdmin) {
+                show('first-user-notice');
+            } else {
+                hide('first-user-notice');
+            }
+
+            show('view-login');
+        }
+
+        // --- Login / Registration Logic ---
+        $('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = $('login-email').value.trim().toLowerCase();
+            const btn = $('login-btn');
+            btn.innerHTML = '<div class="spinner border-t-white"></div>';
+            btn.disabled = true;
+
+            try {
+                // Find user by email in cached data
+                const existingUser = state.data.users.find(u => u.email === email);
+                
+                if (existingUser) {
+                    state.profile = existingUser;
+                    toast("Login successful", "success");
+                    loadApplication();
+                } else {
+                    // Register new user
+                    const hasAdmin = state.data.users.some(u => u.role === 'admin');
+                    const role = hasAdmin ? 'parent' : 'admin'; // Default fallback
+                    
+                    const newUser = {
+                        id: state.user.uid + "_" + Date.now(), // Generate unique ID
+                        email: email,
+                        name: email.split('@')[0],
+                        role: role,
+                        createdAt: new Date().toISOString()
+                    };
+                    
+                    await setDoc(getDocRef('users', newUser.id), newUser);
+                    state.profile = newUser;
+                    toast(`Account created as ${role.toUpperCase()}`, "success");
+                    loadApplication();
+                }
+            } catch (err) {
+                console.error(err);
+                toast("Error processing login", "error");
+            } finally {
+                btn.innerHTML = 'Sign In / Register';
+                btn.disabled = false;
+            }
+        });
+
+        $('logout-btn').addEventListener('click', () => {
+            state.profile = null;
+            hide('view-main');
+            show('view-login');
+            $('login-email').value = '';
+        });
+
+        // --- Main App Initialization ---
+        function loadApplication() {
+            hide('view-login');
+            show('view-main');
+            
+            $('user-name-display').textContent = state.profile.name;
+            $('user-role-display').textContent = state.profile.role.replace('_', ' ').toUpperCase();
+            
+            buildNavigation();
+            navigate('dashboard');
+            lucide.createIcons();
+        }
+
+        // --- Navigation ---
+        const routes = {
+            admin: [
+                { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
+                { id: 'users', icon: 'users', label: 'Manage Users' },
+                { id: 'classes', icon: 'school', label: 'Classes & Subjects' },
+                { id: 'students', icon: 'users', label: 'Students' }
+            ],
+            class_teacher: [
+                { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
+                { id: 'class-analysis', icon: 'pie-chart', label: 'Class Analysis' },
+                { id: 'reports', icon: 'file-text', label: 'Report Cards' }
+            ],
+            subject_teacher: [
+                { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
+                { id: 'marks', icon: 'edit-3', label: 'Enter Marks' }
+            ],
+            parent: [
+                { id: 'dashboard', icon: 'layout-dashboard', label: 'Dashboard' },
+                { id: 'child-report', icon: 'award', label: 'Child Performance' }
+            ]
+        };
+
+        function buildNavigation() {
+            const menu = $('nav-menu');
+            menu.innerHTML = '';
+            const userRoutes = routes[state.profile.role] || [];
+            
+            userRoutes.forEach(route => {
+                const a = document.createElement('a');
+                a.href = `#${route.id}`;
+                a.className = `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${state.currentRoute === route.id ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`;
+                a.innerHTML = `<i data-lucide="${route.icon}" class="w-5 h-5"></i> ${route.label}`;
+                a.onclick = (e) => { e.preventDefault(); navigate(route.id); };
+                menu.appendChild(a);
+            });
+            lucide.createIcons();
+        }
+
+        function navigate(routeId) {
+            state.currentRoute = routeId;
+            buildNavigation();
+            
+            // Close mobile sidebar if open
+            $('sidebar').classList.remove('translate-x-0');
+            $('sidebar').classList.add('-translate-x-full');
+            hide('sidebar-overlay');
+
+            renderCurrentView();
+        }
+
+        // --- UI Rendering Engine ---
+        function renderCurrentView() {
+            const container = $('content-area');
+            container.innerHTML = ''; // Clear current
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'fade-in space-y-6 max-w-7xl mx-auto pb-10';
+            
+            try {
+                // Header
+                const routeLabel = routes[state.profile.role]?.find(r => r.id === state.currentRoute)?.label || 'Dashboard';
+                wrapper.innerHTML = `<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <h1 class="text-2xl font-bold text-gray-900">${routeLabel}</h1>
+                </div>`;
+                
+                // Content Switcher
+                if (state.currentRoute === 'dashboard') renderDashboard(wrapper);
+                else if (state.currentRoute === 'users' && state.profile.role === 'admin') renderUsersMgr(wrapper);
+                else if (state.currentRoute === 'classes' && state.profile.role === 'admin') renderClassesMgr(wrapper);
+                else if (state.currentRoute === 'students' && state.profile.role === 'admin') renderStudentsMgr(wrapper);
+                else if (state.currentRoute === 'marks' && state.profile.role === 'subject_teacher') renderMarksEntry(wrapper);
+                else if (state.currentRoute === 'class-analysis' && state.profile.role === 'class_teacher') renderClassAnalysis(wrapper);
+                else if (state.currentRoute === 'reports' && state.profile.role === 'class_teacher') renderReports(wrapper);
+                else if (state.currentRoute === 'child-report' && state.profile.role === 'parent') renderParentView(wrapper);
+                else wrapper.innerHTML += `<div class="p-8 text-center text-gray-500 bg-white rounded-xl shadow-sm border border-gray-100">View under construction or access denied.</div>`;
+            } catch (error) {
+                console.error("Render error:", error);
+                wrapper.innerHTML += `<div class="p-4 bg-red-50 text-red-600 rounded-lg">An error occurred while loading this view. Auto-correcting...</div>`;
+                // Auto-correct: attempt recovery by returning to dashboard
+                setTimeout(() => { if(state.currentRoute !== 'dashboard') navigate('dashboard'); }, 2000);
+            }
+
+            container.appendChild(wrapper);
+            lucide.createIcons();
+        }
+
+        // --- Dashboard Widgets ---
+        function renderDashboard(container) {
+            const grid = document.createElement('div');
+            grid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8';
+
+            const createCard = (title, value, icon, color) => `
+                <div class="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-full ${color} flex items-center justify-center text-white shrink-0">
+                        <i data-lucide="${icon}"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-500">${title}</p>
+                        <h3 class="text-2xl font-bold text-gray-900">${value}</h3>
+                    </div>
+                </div>
+            `;
+
+            if (state.profile.role === 'admin') {
+                grid.innerHTML += createCard('Total Students', state.data.students.length, 'users', 'bg-blue-500');
+                grid.innerHTML += createCard('Total Teachers', state.data.users.filter(u=>u.role.includes('teacher')).length, 'user-check', 'bg-green-500');
+                grid.innerHTML += createCard('Total Classes', state.data.classes.length, 'school', 'bg-purple-500');
+                grid.innerHTML += createCard('Subjects', state.data.subjects.length, 'book-open', 'bg-yellow-500');
+            } else if (state.profile.role === 'class_teacher') {
+                const myClass = state.data.classes.find(c => c.classTeacherId === state.profile.id);
+                const studentCount = myClass ? state.data.students.filter(s => s.classId === myClass.id).length : 0;
+                grid.innerHTML += createCard('My Class', myClass ? myClass.name : 'None', 'school', 'bg-blue-500');
+                grid.innerHTML += createCard('Students', studentCount, 'users', 'bg-green-500');
+            } else {
+                 grid.innerHTML += `<div class="col-span-full p-6 bg-blue-50 text-blue-800 rounded-xl border border-blue-100">Welcome to EduTrack Pro. Use the menu to navigate.</div>`;
+            }
+            
+            container.appendChild(grid);
+        }
+
+        // --- Modal System ---
+        window.openModal = (title, contentHtml, footerHtml) => {
+            $('modal-title').innerText = title;
+            $('modal-body').innerHTML = contentHtml;
+            $('modal-footer').innerHTML = footerHtml;
+            show('modal-container');
+        };
+        window.closeModal = () => { hide('modal-container'); };
+
+        // --- Admin: Users Management ---
+        function renderUsersMgr(container) {
+            let html = `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-800">System Users</h2>
+                        <button id="btn-add-user" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Add User
+                        </button>
+                    </div>
+                    <div class="table-container">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="bg-gray-50 text-gray-500">
+                                <tr><th class="px-6 py-3">Name</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Role</th><th class="px-6 py-3">Actions</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${state.data.users.map(u => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 font-medium text-gray-900">${u.name}</td>
+                                        <td class="px-6 py-4 text-gray-500">${u.email}</td>
+                                        <td class="px-6 py-4"><span class="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs uppercase font-medium">${u.role.replace('_', ' ')}</span></td>
+                                        <td class="px-6 py-4">
+                                            <button onclick="deleteDocHandler('users', '${u.id}')" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                                ${state.data.users.length === 0 ? '<tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">No users found</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += html;
+
+            container.querySelector('#btn-add-user').addEventListener('click', () => {
+                const body = `
+                    <div class="space-y-4">
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label><input type="text" id="nu-name" class="w-full p-2 border rounded-lg"></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="nu-email" class="w-full p-2 border rounded-lg"></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                            <select id="nu-role" class="w-full p-2 border rounded-lg">
+                                <option value="admin">Admin</option>
+                                <option value="class_teacher">Class Teacher</option>
+                                <option value="subject_teacher">Subject Teacher</option>
+                                <option value="parent">Parent</option>
+                            </select>
+                        </div>
+                    </div>
+                `;
+                const footer = `
+                    <button onclick="closeModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+                    <button id="save-user-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save User</button>
+                `;
+                openModal('Add New User', body, footer);
+                
+                $('save-user-btn').onclick = async () => {
+                    const data = {
+                        id: generateId(),
+                        name: $('nu-name').value,
+                        email: $('nu-email').value,
+                        role: $('nu-role').value,
+                        createdAt: new Date().toISOString()
+                    };
+                    if(!data.name || !data.email) return toast('Fill all fields', 'error');
+                    await setDoc(getDocRef('users', data.id), data);
+                    toast('User added', 'success');
+                    closeModal();
+                };
+            });
+        }
+
+        // --- Generic Delete Handler ---
+        window.deleteDocHandler = async (collectionName, id) => {
+            if(confirm('Are you sure you want to delete this record?')) {
+                try {
+                    await deleteDoc(getDocRef(collectionName, id));
+                    toast('Record deleted', 'success');
+                } catch(e) {
+                    toast('Error deleting record', 'error');
+                }
+            }
+        };
+
+        // --- Admin: Classes & Subjects ---
+        function renderClassesMgr(container) {
+            const teachers = state.data.users.filter(u => u.role.includes('teacher'));
+            
+            // Classes Section
+            let html = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">`;
+            
+            // Classes Card
+            html += `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="font-semibold text-gray-800">Classes</h2>
+                        <button id="btn-add-class" class="text-blue-600 hover:bg-blue-50 p-2 rounded-lg"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                    </div>
+                    <ul class="divide-y divide-gray-100">
+                        ${state.data.classes.map(c => {
+                            const ct = teachers.find(t => t.id === c.classTeacherId)?.name || 'None Assigned';
+                            return `<li class="py-3 flex justify-between items-center">
+                                <div><p class="font-medium text-gray-900">${c.name}</p><p class="text-xs text-gray-500">Tr: ${ct}</p></div>
+                                <button onclick="deleteDocHandler('classes', '${c.id}')" class="text-red-400 hover:text-red-600"><i data-lucide="trash" class="w-4 h-4"></i></button>
+                            </li>`;
+                        }).join('')}
+                        ${state.data.classes.length===0?'<li class="py-4 text-gray-500 text-sm">No classes</li>':''}
+                    </ul>
+                </div>
+            `;
+
+            // Subjects Card
+            html += `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="font-semibold text-gray-800">Subjects</h2>
+                        <button id="btn-add-subject" class="text-blue-600 hover:bg-blue-50 p-2 rounded-lg"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                    </div>
+                    <ul class="divide-y divide-gray-100">
+                        ${state.data.subjects.map(s => `
+                            <li class="py-3 flex justify-between items-center">
+                                <span class="font-medium text-gray-900">${s.name}</span>
+                                <button onclick="deleteDocHandler('subjects', '${s.id}')" class="text-red-400 hover:text-red-600"><i data-lucide="trash" class="w-4 h-4"></i></button>
+                            </li>
+                        `).join('')}
+                        ${state.data.subjects.length===0?'<li class="py-4 text-gray-500 text-sm">No subjects</li>':''}
+                    </ul>
+                </div>
+            `;
+            html += `</div>`;
+            container.innerHTML += html;
+
+            container.querySelector('#btn-add-class').onclick = () => {
+                const body = `
+                    <div class="space-y-4">
+                        <div><label class="block text-sm">Class Name</label><input type="text" id="nc-name" class="w-full p-2 border rounded-lg" placeholder="e.g. Grade 4 North"></div>
+                        <div><label class="block text-sm">Class Teacher</label>
+                            <select id="nc-teacher" class="w-full p-2 border rounded-lg">
+                                <option value="">-- Select Teacher --</option>
+                                ${teachers.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>`;
+                openModal('Add Class', body, `<button onclick="closeModal()" class="px-4 py-2 text-gray-500">Cancel</button><button id="save-class" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>`);
+                $('save-class').onclick = async () => {
+                    const data = { id: generateId(), name: $('nc-name').value, classTeacherId: $('nc-teacher').value };
+                    if(!data.name) return toast('Enter class name', 'error');
+                    await setDoc(getDocRef('classes', data.id), data); toast('Class saved', 'success'); closeModal();
+                };
+            };
+
+            container.querySelector('#btn-add-subject').onclick = () => {
+                const body = `<div><label class="block text-sm">Subject Name</label><input type="text" id="ns-name" class="w-full p-2 border rounded-lg" placeholder="e.g. Mathematics"></div>`;
+                openModal('Add Subject', body, `<button onclick="closeModal()" class="px-4 py-2 text-gray-500">Cancel</button><button id="save-subj" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>`);
+                $('save-subj').onclick = async () => {
+                    const data = { id: generateId(), name: $('ns-name').value };
+                    if(!data.name) return toast('Enter subject name', 'error');
+                    await setDoc(getDocRef('subjects', data.id), data); toast('Subject saved', 'success'); closeModal();
+                };
+            };
+        }
+
+        // --- Admin: Students ---
+        function renderStudentsMgr(container) {
+            let html = `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-800">Students</h2>
+                        <button id="btn-add-student" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Add Student
+                        </button>
+                    </div>
+                    <div class="table-container">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="bg-gray-50 text-gray-500">
+                                <tr><th class="px-6 py-3">Adm No</th><th class="px-6 py-3">Name</th><th class="px-6 py-3">Class</th><th class="px-6 py-3">Parent Email</th><th class="px-6 py-3">Actions</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${state.data.students.map(s => {
+                                    const cName = state.data.classes.find(c=>c.id === s.classId)?.name || 'Unknown';
+                                    return `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 font-medium">${s.admNo}</td>
+                                        <td class="px-6 py-4">${s.name}</td>
+                                        <td class="px-6 py-4">${cName}</td>
+                                        <td class="px-6 py-4 text-gray-500">${s.parentEmail || '-'}</td>
+                                        <td class="px-6 py-4">
+                                            <button onclick="deleteDocHandler('students', '${s.id}')" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                        </td>
+                                    </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += html;
+
+            container.querySelector('#btn-add-student').onclick = () => {
+                const body = `
+                    <div class="space-y-4">
+                        <div><label class="block text-sm">Admission Number</label><input type="text" id="nstd-adm" class="w-full p-2 border rounded-lg"></div>
+                        <div><label class="block text-sm">Full Name</label><input type="text" id="nstd-name" class="w-full p-2 border rounded-lg"></div>
+                        <div><label class="block text-sm">Class</label>
+                            <select id="nstd-class" class="w-full p-2 border rounded-lg">
+                                ${state.data.classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div><label class="block text-sm">Parent Email (Optional)</label><input type="email" id="nstd-parent" class="w-full p-2 border rounded-lg"></div>
+                    </div>`;
+                openModal('Add Student', body, `<button onclick="closeModal()" class="px-4 py-2 text-gray-500">Cancel</button><button id="save-std" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Save</button>`);
+                $('save-std').onclick = async () => {
+                    const data = { id: generateId(), admNo: $('nstd-adm').value, name: $('nstd-name').value, classId: $('nstd-class').value, parentEmail: $('nstd-parent').value };
+                    if(!data.name || !data.admNo || !data.classId) return toast('Fill required fields', 'error');
+                    await setDoc(getDocRef('students', data.id), data); toast('Student saved', 'success'); closeModal();
+                };
+            };
+        }
+
+        // --- Subject Teacher: Marks Entry ---
+        function renderMarksEntry(container) {
+            let html = `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div><label class="block text-sm font-medium mb-1">Class</label>
+                            <select id="sel-class" class="w-full p-2 border rounded-lg">
+                                <option value="">Select Class</option>
+                                ${state.data.classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div><label class="block text-sm font-medium mb-1">Subject</label>
+                            <select id="sel-subj" class="w-full p-2 border rounded-lg">
+                                <option value="">Select Subject</option>
+                                ${state.data.subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div><label class="block text-sm font-medium mb-1">Term</label>
+                            <select id="sel-term" class="w-full p-2 border rounded-lg">
+                                <option value="Term 1">Term 1</option><option value="Term 2">Term 2</option><option value="Term 3">Term 3</option>
+                            </select>
+                        </div>
+                        <button id="btn-load-sheet" class="bg-blue-600 text-white p-2 rounded-lg font-medium hover:bg-blue-700">Load Roster</button>
+                    </div>
+                </div>
+                <div id="marks-sheet-container"></div>
+            `;
+            container.innerHTML += html;
+
+            container.querySelector('#btn-load-sheet').onclick = () => {
+                const classId = $('sel-class').value;
+                const subjId = $('sel-subj').value;
+                const term = $('sel-term').value;
+                if(!classId || !subjId) return toast('Select class and subject', 'error');
+
+                const students = state.data.students.filter(s => s.classId === classId);
+                if(students.length === 0) {
+                    $('marks-sheet-container').innerHTML = `<div class="p-8 text-center text-gray-500 bg-white rounded-xl">No students in this class.</div>`;
+                    return;
+                }
+
+                // UI for Marks List
+                let sheetHtml = `
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                            <h3 class="font-semibold text-gray-800">Marks Entry (${term})</h3>
+                            <div class="flex gap-2">
+                                <label class="bg-green-600 text-white px-3 py-1.5 rounded text-sm cursor-pointer hover:bg-green-700 flex items-center gap-1">
+                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> CSV Upload
+                                    <input type="file" id="csv-upload" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="hidden">
+                                </label>
+                                <button id="btn-save-marks" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700">Save All</button>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table class="w-full text-left text-sm whitespace-nowrap">
+                                <thead class="bg-gray-100 text-gray-600"><tr><th class="px-4 py-2">Adm No</th><th class="px-4 py-2">Name</th><th class="px-4 py-2">Score (0-100)</th><th class="px-4 py-2">Grade</th></tr></thead>
+                                <tbody>
+                                    ${students.map(s => {
+                                        const markId = `${s.id}_${subjId}_${term.replace(' ','')}`;
+                                        const existing = state.data.marks.find(m => m.id === markId);
+                                        const score = existing ? existing.score : '';
+                                        const gradeInfo = score !== '' ? getGrade(score) : {grade:'', color:''};
+                                        return `
+                                        <tr class="border-b border-gray-50">
+                                            <td class="px-4 py-2">${s.admNo}</td>
+                                            <td class="px-4 py-2">${s.name}</td>
+                                            <td class="px-4 py-2"><input type="number" min="0" max="100" class="mark-input border rounded p-1 w-20 text-center" data-student="${s.id}" data-markid="${markId}" value="${score}" oninput="updateGradeDisplay(this)"></td>
+                                            <td class="px-4 py-2 font-bold <span class="math-inline">\{gradeInfo\.color\}" id="grade\-</span>{markId}">${gradeInfo.grade}</td>
+                                        </tr>`;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                $('marks-sheet-container').innerHTML = sheetHtml;
+                lucide.createIcons();
+
+                // Live grade update script logic
+                window.updateGradeDisplay = (input) => {
+                    const gradeTd = $('grade-' + input.dataset.markid);
+                    const val = input.value;
+                    if(val === '') { gradeTd.textContent = ''; return; }
+                    const g = getGrade(val);
+                    gradeTd.textContent = g.grade;
+                    gradeTd.className = `px-4 py-2 font-bold ${g.color}`;
+                };
+
+                // Save Logic
+                $('btn-save-marks').onclick = async () => {
+                    const inputs = document.querySelectorAll('.mark-input');
+                    const btn = $('btn-save-marks');
+                    btn.textContent = 'Saving...'; btn.disabled = true;
+                    try {
+                        let promises = [];
+                        inputs.forEach(inp => {
+                            if(inp.value !== '') {
+                                const m = {
+                                    id: inp.dataset.markid,
+                                    studentId: inp.dataset.student,
+                                    subjectId: subjId,
+                                    term: term,
+                                    score: parseFloat(inp.value),
+                                    timestamp: new Date().toISOString()
+                                };
+                                promises.push(setDoc(getDocRef('marks', m.id), m));
+                            }
+                        });
+                        await Promise.all(promises);
+                        toast('Marks saved successfully', 'success');
+                    } catch (e) {
+                        toast('Error saving marks', 'error');
+                        console.error(e);
+                    } finally {
+                        btn.textContent = 'Save All'; btn.disabled = false;
+                    }
+                };
+
+                // CSV Upload Logic
+                $('csv-upload').addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if(!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        try {
+                            const data = evt.target.result;
+                            const workbook = XLSX.read(data, { type: 'binary' });
+                            const firstSheet = workbook.SheetNames[0];
+                            const excelRows = XLSX.utils.sheet_to_row_object_array(workbook.Sheets[firstSheet]);
+                            
+                            let matchCount = 0;
+                            excelRows.forEach(row => {
+                                // Assume columns: AdmNo, Score
+                                const admKey = Object.keys(row).find(k => k.toLowerCase().includes('adm'));
+                                const scoreKey = Object.keys(row).find(k => k.toLowerCase().includes('score') || k.toLowerCase().includes('mark'));
+                                
+                                if(admKey && scoreKey) {
+                                    const student = students.find(s => s.admNo.toString() == row[admKey].toString());
+                                    if(student) {
+                                        const markId = `${student.id}_${subjId}_${term.replace(' ','')}`;
+                                        const input = document.querySelector(`input[data-markid="${markId}"]`);
+                                        if(input) {
+                                            input.value = row[scoreKey];
+                                            updateGradeDisplay(input);
+                                            matchCount++;
+                                        }
+                                    }
+                                }
+                            });
+                            toast(`Imported ${matchCount} marks. Click Save All to commit.`, 'info');
+                        } catch(err) {
+                            toast('Error parsing file. Ensure it has AdmNo and Score columns.', 'error');
+                        }
+                    };
+                    reader.readAsBinaryString(file);
+                });
+            };
+        }
+
+        // --- Class Teacher: Analytics & Report Cards ---
+        function calculateClassStats(classId, term) {
+            const students = state.data.students.filter(s => s.classId === classId);
+            let subjectAverages = {};
+            let studentTotals = [];
+
+            state.data.subjects.forEach(subj => { subjectAverages[subj.name] = { total: 0, count: 0 }; });
+
+            students.forEach(student => {
+                let totalScore = 0;
+                let subjectsTaken = 0;
+                let weakAreas = [];
+
+                state.data.subjects.forEach(subj => {
+                    const markId = `${student.id}_${subj.id}_${term.replace(' ','')}`;
+                    const mark = state.data.marks.find(m => m.id === markId);
+                    if(mark) {
+                        totalScore += mark.score;
+                        subjectsTaken++;
+                        subjectAverages[subj.name].total += mark.score;
+                        subjectAverages[subj.name].count++;
+                        if(mark.score < 50) weakAreas.push(subj.name);
+                    }
+                });
+
+                const avg = subjectsTaken > 0 ? (totalScore / subjectsTaken).toFixed(1) : 0;
+                studentTotals.push({
+                    student, totalScore, average: parseFloat(avg), weakAreas,
+                    gradeInfo: getGrade(avg)
+                });
+            });
+
+            // Calculate Rankings
+            studentTotals.sort((a,b) => b.totalScore - a.totalScore);
+            studentTotals.forEach((st, idx) => st.rank = idx + 1);
+
+            // Finalize Subject Averages
+            const chartData = { labels: [], values: [] };
+            Object.keys(subjectAverages).forEach(key => {
+                const s = subjectAverages[key];
+                const avg = s.count > 0 ? (s.total / s.count).toFixed(1) : 0;
+                chartData.labels.push(key);
+                chartData.values.push(parseFloat(avg));
+            });
+
+            return { students: studentTotals, chartData };
+        }
+
+        function renderClassAnalysis(container) {
+            const myClass = state.data.classes.find(c => c.classTeacherId === state.profile.id) || state.data.classes[0];
+            if(!myClass) {
+                container.innerHTML += `<div class="p-6 bg-white rounded-xl shadow-sm text-center">You are not assigned as a Class Teacher.</div>`;
+                return;
+            }
+
+            const term = "Term 1"; // Default for view, can make dynamic
+            const stats = calculateClassStats(myClass.id, term);
+
+            let html = `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+                    <h2 class="text-xl font-bold mb-4">Analytics: ${myClass.name} (${term})</h2>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="h-64"><canvas id="subjectAvgChart"></canvas></div>
+                        <div class="h-64"><canvas id="gradeDistChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4 border-b bg-gray-50 font-semibold">Student Rankings & Predictive Insights</div>
+                    <div class="table-container">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-100 text-gray-600"><tr><th class="px-4 py-2">Rank</th><th class="px-4 py-2">Name</th><th class="px-4 py-2">Average</th><th class="px-4 py-2">CBC Grade</th><th class="px-4 py-2">Insights / Action Needed</th></tr></thead>
+                            <tbody>
+                                ${stats.students.map(s => `
+                                    <tr class="border-b border-gray-50">
+                                        <td class="px-4 py-3 font-bold text-gray-700">#${s.rank}</td>
+                                        <td class="px-4 py-3">${s.student.name}</td>
+                                        <td class="px-4 py-3">${s.average}%</td>
+                                        <td class="px-4 py-3 font-bold <span class="math-inline">\{s\.gradeInfo\.color\}"\></span>{s.gradeInfo.grade}</td>
+                                        <td class="px-4 py-3 text-xs text-gray-500">
+                                            ${s.weakAreas.length > 0 
+                                                ? `<span class="text-red-500 font-medium">At Risk:</span> Needs intervention in ${s.weakAreas.join(', ')} to meet expectations.` 
+                                                : `<span class="text-green-500 font-medium">On Track:</span> Consistently meeting or exceeding expectations.`}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                                ${stats.students.length===0? '<tr><td colspan="5" class="text-center py-4">No data available</td></tr>':''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += html;
+
+            // Render Charts
+            setTimeout(() => {
+                if(!document.getElementById('subjectAvgChart')) return;
+                
+                new Chart(document.getElementById('subjectAvgChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: stats.chartData.labels,
+                        datasets: [{ label: 'Subject Averages', data: stats.chartData.values, backgroundColor: '#3b82f6', borderRadius: 4 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { title: {display: true, text: 'Average Score per Subject'} } }
+                });
+
+                // Grade Distribution Calc
+                let dist = { 'EE':0, 'ME':0, 'AE':0, 'BE':0 };
+                stats.students.forEach(s => { if(s.average>0) dist[s.gradeInfo.grade]++; });
+
+                new Chart(document.getElementById('gradeDistChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Exceeding (EE)', 'Meeting (ME)', 'Approaching (AE)', 'Below (BE)'],
+                        datasets: [{ data: [dist.EE, dist.ME, dist.AE, dist.BE], backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'] }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { title: {display: true, text: 'Overall Grade Distribution'} } }
+                });
+            }, 100);
+        }
+
+        // --- PDF Generation Logic ---
+        function renderReports(container) {
+            const myClass = state.data.classes.find(c => c.classTeacherId === state.profile.id);
+            if(!myClass) { container.innerHTML += `<div class="p-6 bg-white rounded-xl shadow-sm text-center">No class assigned.</div>`; return; }
+            
+            const term = "Term 1";
+            const stats = calculateClassStats(myClass.id, term);
+
+            let html = `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-6 border-b flex justify-between items-center">
+                        <h2 class="text-lg font-bold">Generate Report Cards - ${myClass.name}</h2>
+                        <button id="btn-print-all" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-green-700">
+                            <i data-lucide="printer" class="w-4 h-4"></i> Download All (PDF)
+                        </button>
+                    </div>
+                    <div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${stats.students.map(s => `
+                            <div class="border rounded-lg p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow bg-gray-50">
+                                <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold mb-2">${s.student.name.charAt(0)}</div>
+                                <h3 class="font-bold text-gray-800">${s.student.name}</h3>
+                                <p class="text-xs text-gray-500 mb-3">Adm: ${s.student.admNo}</p>
+                                <button onclick="generateSinglePDF('${s.student.id}')" class="mt-auto bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-100 w-full flex justify-center items-center gap-2">
+                                    <i data-lucide="download" class="w-4 h-4"></i> Get PDF
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            container.innerHTML += html;
+
+            container.querySelector('#btn-print-all').onclick = () => {
+                toast('Generating bulk PDF... Please wait.', 'info');
+                // For simplicity in this demo, we generate one combined PDF
+                generateBulkPDF(stats.students, myClass.name, term);
+            };
+        }
+
+        // jsPDF Generator function
+        window.generateSinglePDF = (studentId) => {
+            const student = state.data.students.find(s => s.id === studentId);
+            const term = "Term 1"; // Hardcoded for demo
+            if(!student) return;
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Header
+            doc.setFontSize(22);
+            doc.setTextColor(37, 99, 235); // Blue
+            doc.text("EDUTRACK PRO ACADEMY", 105, 20, { align: "center" });
+            
+            doc.setFontSize(14);
+            doc.setTextColor(50, 50, 50);
+            doc.text("CBC STUDENT PROGRESS REPORT", 105, 28, { align: "center" });
+
+            doc.setFontSize(11);
+            doc.text(`Name: ${student.name}`, 14, 45);
+            doc.text(`Adm No: ${student.admNo}`, 14, 52);
+            doc.text(`Term: ${term}`, 150, 45);
+            
+            // Table Data
+            const tableBody = [];
+            let total = 0, count = 0;
+
+            state.data.subjects.forEach(subj => {
+                const markId = `${student.id}_${subj.id}_${term.replace(' ','')}`;
+                const mark = state.data.marks.find(m => m.id === markId);
+                const score = mark ? mark.score : '-';
+                const gradeInfo = mark ? getGrade(mark.score) : {grade:'-', remark:'-'};
+                
+                tableBody.push([subj.name, score, gradeInfo.grade, gradeInfo.remark]);
+                if(mark) { total += mark.score; count++; }
+            });
+
+            const avg = count > 0 ? (total/count).toFixed(1) : 0;
+            const overallGrade = getGrade(avg);
+
+            doc.autoTable({
+                startY: 60,
+                head: [['Learning Area', 'Score (%)', 'CBC Grade', 'Remarks']],
+                body: tableBody,
+                theme: 'grid',
+                headStyles: { fillColor: [37, 99, 235] },
+                styles: { fontSize: 10 }
+            });
+
+            const finalY = doc.lastAutoTable.finalY || 60;
+            
+            // Summary Box
+            doc.setDrawColor(200);
+            doc.setFillColor(245, 245, 245);
+            doc.rect(14, finalY + 10, 182, 30, 'FD');
+            
+            doc.setFontSize(12);
+            doc.setTextColor(0);
+            doc.text(`Average Score: ${avg}%`, 20, finalY + 18);
+            doc.text(`Overall Assessment: ${overallGrade.remark} (${overallGrade.grade})`, 20, finalY + 26);
+            
+            // Grading Key
+            doc.setFontSize(8);
+            doc.setTextColor(100);
+            doc.text("Grading Key: 80-100 (EE) Exceeding | 65-79 (ME) Meeting | 50-64 (AE) Approaching | 0-49 (BE) Below", 14, 280);
+
+            doc.save(`${student.name}_ReportCard.pdf`);
+            toast('PDF Downloaded', 'success');
+        };
+
+        window.generateBulkPDF = (studentsStats, className, term) => {
+             const { jsPDF } = window.jspdf;
+             const doc = new jsPDF();
+             
+             studentsStats.forEach((stat, index) => {
+                 if(index > 0) doc.addPage();
+                 
+                 // Reuse similar logic as single PDF
+                 doc.setFontSize(22); doc.setTextColor(37, 99, 235);
+                 doc.text("EDUTRACK PRO ACADEMY", 105, 20, { align: "center" });
+                 doc.setFontSize(14); doc.setTextColor(50, 50, 50);
+                 doc.text("CBC STUDENT PROGRESS REPORT", 105, 28, { align: "center" });
+
+                 doc.setFontSize(11);
+                 doc.text(`Name: ${stat.student.name}`, 14, 45);
+                 doc.text(`Class: ${className}`, 14, 52);
+                 doc.text(`Term: ${term}`, 150, 45);
+
+                 const tableBody = [];
+                 state.data.subjects.forEach(subj => {
+                    const markId = `${stat.student.id}_${subj.id}_${term.replace(' ','')}`;
+                    const mark = state.data.marks.find(m => m.id === markId);
+                    const score = mark ? mark.score : '-';
+                    const gradeInfo = mark ? getGrade(mark.score) : {grade:'-', remark:'-'};
+                    tableBody.push([subj.name, score, gradeInfo.grade, gradeInfo.remark]);
+                 });
+
+                 doc.autoTable({ startY: 60, head: [['Learning Area', 'Score (%)', 'Grade', 'Remarks']], body: tableBody, theme: 'grid' });
+                 
+                 const finalY = doc.lastAutoTable.finalY || 60;
+                 doc.text(`Class Rank: ${stat.rank} out of ${studentsStats.length}`, 14, finalY + 10);
+                 doc.text(`Average: ${stat.average}% (${stat.gradeInfo.grade})`, 14, finalY + 18);
+             });
+
+             doc.save(`${className}_Bulk_Reports.pdf`);
+        };
+
+        // --- Network Offline Handling ---
+        window.addEventListener('offline', () => { show('network-status'); });
+        window.addEventListener('online', () => { hide('network-status'); toast('Connection restored. Data syncing.', 'success'); });
+
+        // --- Mobile Sidebar Toggle ---
+        $('open-sidebar').onclick = () => {
+            $('sidebar').classList.remove('-translate-x-full');
+            $('sidebar').classList.add('translate-x-0');
+            show('sidebar-overlay');
+        };
+        const closeMenu = () => {
+            $('sidebar').classList.add('-translate-x-full');
+            $('sidebar').classList.remove('translate-x-0');
+            hide('sidebar-overlay');
+        };
+        $('close-sidebar').onclick = closeMenu;
+        $('sidebar-overlay').onclick = closeMenu;
+
+        // Boot
+        window.onload = () => {
+            initAuth();
+            if(!navigator.onLine) show('network-status');
+        };
+
+    </script>
+</body>
+</html>
